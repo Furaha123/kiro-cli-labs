@@ -1,0 +1,149 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'EC2 Scheduler for sampleapp-load-generator instances'
+
+Resources:
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: EC2Control
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ec2:DescribeInstances
+                  - ec2:StartInstances
+                  - ec2:StopInstances
+                Resource: '*'
+
+  StartFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: ec2-scheduler-start
+      Runtime: python3.12
+      Handler: lambda_function.lambda_handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Code:
+        ZipFile: !Sub |
+          import boto3
+          import os
+          
+          ec2 = boto3.client('ec2', region_name='us-east-1')
+          
+          def lambda_handler(event, context):
+              action = os.environ['ACTION']
+              
+              instances = ec2.describe_instances(
+                  Filters=[
+                      {'Name': 'tag:Name', 'Values': ['*sampleapp-load-generator*']},
+                      {'Name': 'instance-state-name', 'Values': ['running' if action == 'stop' else 'stopped']}
+                  ]
+              )
+              
+              instance_ids = [i['InstanceId'] for r in instances['Reservations'] for i in r['Instances']]
+              
+              if instance_ids:
+                  if action == 'start':
+                      ec2.start_instances(InstanceIds=instance_ids)
+                  else:
+                      ec2.stop_instances(InstanceIds=instance_ids)
+                  return {'statusCode': 200, 'body': f'{action}ed {len(instance_ids)} instances'}
+              
+              return {'statusCode': 200, 'body': 'No instances found'}
+      Environment:
+        Variables:
+          ACTION: start
+      Timeout: 60
+
+  StopFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: ec2-scheduler-stop
+      Runtime: python3.12
+      Handler: lambda_function.lambda_handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Code:
+        ZipFile: !Sub |
+          import boto3
+          import os
+          
+          ec2 = boto3.client('ec2', region_name='us-east-1')
+          
+          def lambda_handler(event, context):
+              action = os.environ['ACTION']
+              
+              instances = ec2.describe_instances(
+                  Filters=[
+                      {'Name': 'tag:Name', 'Values': ['*sampleapp-load-generator*']},
+                      {'Name': 'instance-state-name', 'Values': ['running' if action == 'stop' else 'stopped']}
+                  ]
+              )
+              
+              instance_ids = [i['InstanceId'] for r in instances['Reservations'] for i in r['Instances']]
+              
+              if instance_ids:
+                  if action == 'start':
+                      ec2.start_instances(InstanceIds=instance_ids)
+                  else:
+                      ec2.stop_instances(InstanceIds=instance_ids)
+                  return {'statusCode': 200, 'body': f'{action}ed {len(instance_ids)} instances'}
+              
+              return {'statusCode': 200, 'body': 'No instances found'}
+      Environment:
+        Variables:
+          ACTION: stop
+      Timeout: 60
+
+  StartScheduleRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: ec2-scheduler-start-weekdays
+      Description: Start instances at 9 AM Bangkok time (Mon-Fri)
+      ScheduleExpression: cron(0 2 ? * MON-FRI *)
+      State: ENABLED
+      Targets:
+        - Arn: !GetAtt StartFunction.Arn
+          Id: StartTarget
+
+  StopScheduleRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: ec2-scheduler-stop-weekdays
+      Description: Stop instances at 5 PM Bangkok time (Mon-Fri)
+      ScheduleExpression: cron(0 10 ? * MON-FRI *)
+      State: ENABLED
+      Targets:
+        - Arn: !GetAtt StopFunction.Arn
+          Id: StopTarget
+
+  StartPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref StartFunction
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt StartScheduleRule.Arn
+
+  StopPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref StopFunction
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt StopScheduleRule.Arn
+
+Outputs:
+  StartFunctionArn:
+    Value: !GetAtt StartFunction.Arn
+  StopFunctionArn:
+    Value: !GetAtt StopFunction.Arn

@@ -1,36 +1,21 @@
-# EC2 Instance Scheduler
+# Kiro CLI Labs
 
-Automates starting and stopping EC2 instances with names containing 'sampleapp-load-generator' in us-east-1 based on Bangkok business hours (9 AM - 5 PM, Mon-Fri).
+This repository contains various AWS and development projects created during Kiro CLI workshops.
 
-## Schedule
+## Projects
 
-- **Start**: 9:00 AM Bangkok time (2:00 AM UTC) - Monday to Friday
-- **Stop**: 5:00 PM Bangkok time (10:00 AM UTC) - Monday to Friday
+### Sudoku Web Application
+A simple, lightweight sudoku game that runs entirely in your browser.
 
-## Deployment
+### EC2 Instance Scheduler
+Automates starting and stopping EC2 instances based on Bangkok business hours.
 
-```bash
-aws cloudformation deploy \
-  --template-file scheduler-stack.yaml \
-  --stack-name ec2-scheduler \
-  --capabilities CAPABILITY_IAM \
-  --region us-east-1
-```
+### Default Flow Log Analysis
+Network flow log analysis and visualization tools.
 
-## Manual Testing
+### Terraform Infrastructure
+Infrastructure as code examples using Terraform.
 
-Start instances:
-```bash
-aws lambda invoke --function-name ec2-scheduler-start --region us-east-1 response.json
-```
+## Getting Started
 
-Stop instances:
-```bash
-aws lambda invoke --function-name ec2-scheduler-stop --region us-east-1 response.json
-```
-
-## Cleanup
-
-```bash
-aws cloudformation delete-stack --stack-name ec2-scheduler --region us-east-1
-```
+Each project has its own directory with specific instructions. Navigate to the project folder for details.
